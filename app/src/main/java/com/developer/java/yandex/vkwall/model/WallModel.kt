@@ -26,12 +26,13 @@ import java.util.concurrent.TimeUnit
 class WallModel : MainActivity.DestroyListener{
 
     data class RequestData(val id:Int?, val domain:String?, val count:Int?)
+    data class ResponseResult(val list:List<VkWallEntity>, val error: String)
 
     private val userCache = mutableMapOf<Int, User>()
     private val poolExecutor = Executors.newFixedThreadPool(5)
 
-    private val publish = PublishSubject.create<List<VkWallEntity>>()
-    private val publicWallMore = PublishSubject.create<List<VkWallEntity>>()
+    private val publish = PublishSubject.create<JsonElement>()
+    private val publicWallMore = PublishSubject.create<JsonElement>()
     private val publishRequest = PublishSubject.create<RequestData>()
     private val disposable = CompositeDisposable()
 
@@ -45,23 +46,26 @@ class WallModel : MainActivity.DestroyListener{
                 } else {
                     VkApiService.api.getWall(domain = it.domain, count = it.count, accessToken = MainActivity.token)
                 }
-                obs.observeOn(Schedulers.io()).subscribe({
-                    Log.i("WallModel", it.toString())
-                    val list = parseResponse(it)
-                    publish.onNext(list)
-                }, {
-                    it.printStackTrace()
+                obs.subscribeOn(Schedulers.io()).subscribe({ response ->
+                    Log.i("WallModel", response.toString())
+/*                    val list = parseResponse(it)
+
+                    publish.onNext(list)*/
+                    publish.onNext(response.body()!!)
+                }, {error ->
+                    error.printStackTrace()
                 })
             })
     }
 
-    private fun parseResponse(it: Response<JsonElement>): MutableList<VkWallEntity> {
+    public fun parseResponse(it: JsonElement): ResponseResult {
         val list = mutableListOf<VkWallEntity>()
         val calendar = Calendar.getInstance()
-        if (it.body()!!.asJsonObject.has("error")) {
-            //TODO сделать уведомление, если произошла ошибка
+        var error = ""
+        if (it.asJsonObject.has("error")) {
+            error = it.asJsonObject["error"].asJsonObject["error_msg"].asString
         } else {
-            val response = it.body()!!.asJsonObject["response"].asJsonObject
+            val response = it.asJsonObject["response"].asJsonObject
 
             val items = response["items"].asJsonArray
             parseUser(response)
@@ -86,7 +90,7 @@ class WallModel : MainActivity.DestroyListener{
                 }
             }
         }
-        return list
+        return ResponseResult(list, error)
     }
 
     private fun parseUser(response: JsonObject) {
@@ -152,28 +156,31 @@ class WallModel : MainActivity.DestroyListener{
         }
     }
 
-    fun loadWall(idWall:String, countWall:String) : Observable<List<VkWallEntity>>{
+    fun getWallHandler(): Observable<JsonElement> = publish
+
+    fun getWallMoreHandler(): Observable<JsonElement> = publicWallMore
+
+    fun loadWall(idWall:String, countWall:String){
         val id= idWall.toIntOrNull()
         val count: Int? = if (countWall.isEmpty()) null else countWall.toInt()
         publishRequest.onNext(RequestData(id, idWall, count))
-        return publish
     }
 
-    fun loadWallMore(idWall: String, countWall: String?) : Observable<List<VkWallEntity>> {
+
+    fun loadWallMore(idWall: String, countWall: String, offset: Int){
         val id= idWall.toIntOrNull()
-        val count: Int? = countWall?.toInt()
+        val count: Int? = if(countWall.isEmpty()) null else countWall.toInt()
         val obs = if(id != null) {
-            VkApiService.api.getWall(id, count = count, accessToken = MainActivity.token)
+            VkApiService.api.getWall(id, count = count, offset = offset, accessToken = MainActivity.token)
         } else {
-            VkApiService.api.getWall(domain = idWall, count = count, accessToken = MainActivity.token)
+            VkApiService.api.getWall(domain = idWall, count = count, offset = offset, accessToken = MainActivity.token)
         }
         disposable.add(obs.subscribeOn(Schedulers.io()).subscribe({
-            publicWallMore.onNext(parseResponse(it))
+            publicWallMore.onNext(it.body()!!)
         }, {
             publicWallMore.onError(it)
         })
         )
-        return publicWallMore
     }
 
 }

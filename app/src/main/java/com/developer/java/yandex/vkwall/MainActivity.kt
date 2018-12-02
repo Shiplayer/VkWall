@@ -4,10 +4,12 @@ import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
 import android.support.v7.widget.LinearLayoutManager
 import android.view.View
+import com.developer.java.yandex.vkwall.R.id.*
 import com.developer.java.yandex.vkwall.adapter.VkWallAdapter
 import com.developer.java.yandex.vkwall.model.WallModel
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.schedulers.Schedulers
 import kotlinx.android.synthetic.main.activity_main.*
 import java.util.*
 
@@ -25,31 +27,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        rv_wall.layoutManager = LinearLayoutManager(baseContext)
-        mModel = WallModel()
-        mAdapter = VkWallAdapter(mModel)
-        rv_wall.adapter = mAdapter
-
-        val calendar = Calendar.getInstance()
-        button.setOnClickListener {
-            mModel.loadWallMore(edit_id.text.toString(), edit_count.text.toString()).subscribeOn(AndroidSchedulers.mainThread())
-                .subscribe({list ->
-                    mAdapter.addData(list)
-                }, {
-
-                })
-        }
-
-        btn_show.setOnClickListener {
-            mModel.loadWall(edit_id.text.toString(), edit_count.text.toString())
-                .subscribeOn(AndroidSchedulers.mainThread())
-                .doAfterNext{
-                    rv_wall.visibility = View.VISIBLE
-                    pb_loading.visibility = View.GONE
-                }
-                .subscribe {list ->
-                    mAdapter.setData(list)
-                }
+        initLayout()
+        createHandlers()
             /*val id = edit_id.text.toString().toIntOrNull()
             val count: Int? = if (edit_count.text.isEmpty()) null else edit_count.text.toString().toInt()
 
@@ -59,8 +38,82 @@ class MainActivity : AppCompatActivity() {
                 VkApiService.api.getWall(id = id, count = count, accessToken = token)
             }*/
             //disposable.add()
+
+    }
+
+    private fun createHandlers() {
+        button.setOnClickListener {
+            mModel.loadWallMore(edit_id.text.toString(), edit_count.text.toString(), mAdapter.itemCount)
+
         }
 
+        btn_show.setOnClickListener {
+            showLoading()
+            mModel.loadWall(edit_id.text.toString(), edit_count.text.toString())
+        }
+
+        disposable.addAll(
+            mModel.getWallHandler()
+                .subscribeOn(Schedulers.io())
+                .map { json ->
+                    mModel.parseResponse(json)
+                }
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe({ response ->
+                    if (response.error.isEmpty()) {
+                        mAdapter.setData(response.list)
+                        hiddenLoader()
+                    }
+                    else {
+                        showError()
+                        tv_error_msg.text = response.error
+                    }
+                }, {
+
+                }),
+            mModel.getWallMoreHandler()
+                .subscribeOn(Schedulers.io())
+                .map { json ->
+                    mModel.parseResponse(json)
+                }
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe { response ->
+                    if (response.error.isEmpty()) {
+                        mAdapter.addData(response.list)
+                        rv_wall.visibility = View.VISIBLE
+                    }
+                    else{
+                        showError()
+                        tv_error_msg.text = response.error
+                    }
+                }
+        )
+    }
+
+    private fun showError(){
+        rv_wall.visibility = View.GONE
+        tv_error_msg.visibility = View.VISIBLE
+        pb_loading.visibility = View.GONE
+    }
+
+    private fun hiddenLoader(){
+        rv_wall.visibility = View.VISIBLE
+        tv_error_msg.visibility = View.GONE
+        pb_loading.visibility = View.GONE
+    }
+
+    private fun showLoading(){
+        rv_wall.visibility = View.GONE
+        tv_error_msg.visibility = View.GONE
+        pb_loading.visibility = View.VISIBLE
+    }
+
+    private fun initLayout(){
+        rv_wall.layoutManager = LinearLayoutManager(baseContext)
+        rv_wall.isNestedScrollingEnabled = false
+        mModel = WallModel()
+        mAdapter = VkWallAdapter(mModel)
+        rv_wall.adapter = mAdapter
     }
 
     interface DestroyListener{
