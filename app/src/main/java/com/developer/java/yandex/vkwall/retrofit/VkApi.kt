@@ -15,4 +15,7 @@ interface VkApi {
 
     @GET("method/users.get")
     fun getUserInfo(@Query("user_ids") userId: String, @Query("access_token") accessToken:String, @Query("fields") fields: String = "photo_100", @Query("v") v:String = "5.92"): Single<Response<JsonElement>>
+
+    @GET("method/groups.getById")
+    fun getGroupInfo(@Query("group_id") id:String, @Query("access_token") accessToken:String, @Query("v") v:String = "5.92"): Single<JsonElement>
 }

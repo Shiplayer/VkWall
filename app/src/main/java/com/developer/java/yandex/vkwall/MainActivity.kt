@@ -1,11 +1,13 @@
 package com.developer.java.yandex.vkwall
 
 import android.os.Bundle
+import android.os.PersistableBundle
 import android.support.v7.app.AppCompatActivity
 import android.support.v7.widget.LinearLayoutManager
 import android.view.View
 import com.developer.java.yandex.vkwall.R.id.*
 import com.developer.java.yandex.vkwall.adapter.VkWallAdapter
+import com.developer.java.yandex.vkwall.entity.VkWallEntity
 import com.developer.java.yandex.vkwall.model.WallModel
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
@@ -17,11 +19,50 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         public val token = "a10b7fd7a10b7fd7a10b7fd715a144c62baa10ba10b7fd7fafe18ad246c4fcef5af6a9f"
+        private const val LIST_ITEM_KEY: String = "listItemKey"
+        private const val TV_ID_TEXT: String = "textViewIdText"
+        private const val TV_COUNT_TEXT: String = "textViewCountText"
+        private const val POSITION_SCROLL_VIEW: String = "positionScrollView"
     }
 
     private lateinit var mAdapter: VkWallAdapter
     private lateinit var mModel: WallModel
     private val disposable = CompositeDisposable()
+
+    override fun onSaveInstanceState(outState: Bundle?) {
+        outState?.run {
+            putParcelableArrayList(LIST_ITEM_KEY, ArrayList(mAdapter.getItems()))
+            putString(TV_ID_TEXT, edit_id.text.toString())
+            putString(TV_COUNT_TEXT, edit_count.text.toString())
+            val array = IntArray(2)
+            array[0] = main_scroll_view.scrollX
+            array[1] = main_scroll_view.scrollY
+            putIntArray(POSITION_SCROLL_VIEW, array)
+        }
+        super.onSaveInstanceState(outState)
+
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle?) {
+        savedInstanceState?.run{
+            edit_id.setText(this.getString(TV_ID_TEXT, ""))
+            edit_count.setText(this.getString(TV_COUNT_TEXT, ""))
+        }
+        val list = savedInstanceState?.getParcelableArrayList<VkWallEntity>(LIST_ITEM_KEY)?.toList()
+        if(list == null) {
+            mAdapter.setData(listOf())
+        } else {
+            mAdapter.setData(list)
+            edit_id.clearFocus()
+            edit_count.clearFocus()
+            savedInstanceState?.run {
+                val array = this.getIntArray(POSITION_SCROLL_VIEW)
+                main_scroll_view.scrollX = array[0]
+                main_scroll_view.scrollY = array[1]
+            }
+        }
+        super.onRestoreInstanceState(savedInstanceState)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,15 +70,6 @@ class MainActivity : AppCompatActivity() {
 
         initLayout()
         createHandlers()
-            /*val id = edit_id.text.toString().toIntOrNull()
-            val count: Int? = if (edit_count.text.isEmpty()) null else edit_count.text.toString().toInt()
-
-            val obs = if (id == null) {
-                VkApiService.api.getWall(domain = edit_id.text.toString(), count = count, accessToken = token)
-            } else {
-                VkApiService.api.getWall(id = id, count = count, accessToken = token)
-            }*/
-            //disposable.add()
 
     }
 

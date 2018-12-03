@@ -1,5 +1,6 @@
 package com.developer.java.yandex.vkwall.adapter
 
+import android.annotation.SuppressLint
 import android.graphics.drawable.Drawable
 import android.support.v7.widget.RecyclerView
 import android.util.Log
@@ -13,16 +14,19 @@ import com.developer.java.yandex.vkwall.entity.User
 import com.developer.java.yandex.vkwall.entity.VkWallEntity
 import com.developer.java.yandex.vkwall.interactors.UserInteractor
 import com.developer.java.yandex.vkwall.model.WallModel
+import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.schedulers.Schedulers
 import java.net.URL
 import java.text.SimpleDateFormat
+import java.util.*
 import java.util.concurrent.Executors
 
 class VkWallAdapter(var model: WallModel): RecyclerView.Adapter<VkWallAdapter.ViewHolder>() {
 
     private var mData = mutableListOf<VkWallEntity>()
 
-    public fun setData(list : List<VkWallEntity>){
+    fun setData(list : List<VkWallEntity>){
         mData.clear()
         mData.addAll(list)
         notifyDataSetChanged()
@@ -34,6 +38,8 @@ class VkWallAdapter(var model: WallModel): RecyclerView.Adapter<VkWallAdapter.Vi
         notifyItemChanged(position)
     }
 
+    fun getItems() : List<VkWallEntity> = mData
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VkWallAdapter.ViewHolder {
         return ViewHolder(LayoutInflater.from(parent.context).inflate(R.layout.rv_item_text, parent, false), model)
     }
@@ -44,26 +50,6 @@ class VkWallAdapter(var model: WallModel): RecyclerView.Adapter<VkWallAdapter.Vi
 
     override fun onBindViewHolder(holder: VkWallAdapter.ViewHolder, position: Int) {
         holder.init(mData[position])
-
-        /*
-        val user = model.getUser(item.id, object : UserInteractor {
-            override fun onSuccessful(user: User) {
-                notifyItemChanged(position)
-            }
-
-            override fun onError(throwable: Throwable) {
-                Log.i("VkWallAdapterError", throwable.message)
-                throwable.printStackTrace()
-            }
-        })
-        if(user != null){
-
-        }
-         */
-    }
-
-    public fun load(){
-
     }
 
     class ViewHolder(view: View, val model:WallModel) : RecyclerView.ViewHolder(view) {
@@ -87,18 +73,21 @@ class VkWallAdapter(var model: WallModel): RecyclerView.Adapter<VkWallAdapter.Vi
                 showUser(user)
             }
             content.text = item.content
-            date.text = SimpleDateFormat("dd.MM.yy HH:mm").format(item.date)
+            date.text = item.date
         }
 
-        fun showUser(user: User){
+        @SuppressLint("SetTextI18n")
+        fun showUser(user: User) {
             name.text = user.firstName + " " + user.lastName
-            var url = URL(user.urlPhoto)
-            Executors.newSingleThreadExecutor().submit {
-                var logoDrawable = Drawable.createFromStream(url.openStream(), "logo${user.id}")
-                AndroidSchedulers.mainThread().scheduleDirect {
-                    logo.setImageDrawable(logoDrawable)
+            model.addDispose(Observable.just(URL(user.urlPhoto))
+                .subscribeOn(Schedulers.io())
+                .map {
+                    Drawable.createFromStream(it.openStream(), "logo${user.id}")
+                }.observeOn(AndroidSchedulers.mainThread())
+                .subscribe {
+                    logo.setImageDrawable(it)
                 }
-            }
+            )
         }
     }
 }

@@ -10,11 +10,14 @@ import com.developer.java.yandex.vkwall.retrofit.VkApiService
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import io.reactivex.Observable
+import io.reactivex.Single
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.disposables.Disposable
 import io.reactivex.schedulers.Schedulers
 import io.reactivex.subjects.PublishSubject
 import retrofit2.Response
+import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -23,12 +26,12 @@ import java.util.concurrent.TimeUnit
  * Created by Shiplayer on 02.12.18.
  */
 
-class WallModel : MainActivity.DestroyListener{
+class WallModel : MainActivity.DestroyListener {
 
-    data class RequestData(val id:Int?, val domain:String?, val count:Int?)
-    data class ResponseResult(val list:List<VkWallEntity>, val error: String)
+    data class RequestData(val id: Int?, val domain: String?, val count: Int?)
+    data class ResponseResult(val list: List<VkWallEntity>, val error: String)
 
-    private val userCache = mutableMapOf<Int, User>()
+    val userCache = mutableMapOf<Int, User>()
     private val poolExecutor = Executors.newFixedThreadPool(5)
 
     private val publish = PublishSubject.create<JsonElement>()
@@ -52,13 +55,17 @@ class WallModel : MainActivity.DestroyListener{
 
                     publish.onNext(list)*/
                     publish.onNext(response.body()!!)
-                }, {error ->
+                }, { error ->
                     error.printStackTrace()
                 })
             })
     }
 
-    public fun parseResponse(it: JsonElement): ResponseResult {
+    fun addDispose(dispose: Disposable) {
+        disposable.add(dispose)
+    }
+
+    fun parseResponse(it: JsonElement): ResponseResult {
         val list = mutableListOf<VkWallEntity>()
         val calendar = Calendar.getInstance()
         var error = ""
@@ -71,11 +78,12 @@ class WallModel : MainActivity.DestroyListener{
             parseUser(response)
             for (item in items) {
                 calendar.timeInMillis = item.asJsonObject["date"].asLong * 1000
+                val time = SimpleDateFormat("dd.MM.yy HH:mm").format(calendar.time)
                 if (item.asJsonObject.has("text")) {
                     list.add(
                         VkWallEntity(
                             item.asJsonObject["from_id"].asInt,
-                            calendar.time,
+                            time,
                             item.asJsonObject["text"].asString
                         )
                     )
@@ -83,7 +91,7 @@ class WallModel : MainActivity.DestroyListener{
                     list.add(
                         VkWallEntity(
                             item.asJsonObject["from_id"].asInt,
-                            calendar.time,
+                            time,
                             ""
                         )
                     )
@@ -123,36 +131,63 @@ class WallModel : MainActivity.DestroyListener{
         disposable.dispose()
     }
 
-    public fun getUser(id:Int, listener:UserInteractor) : User?{
-        if(userCache.containsKey(id)){
+    fun getUser(id: Int, listener: UserInteractor): User? {
+        if (userCache.containsKey(id)) {
             return userCache[id]
         }
         loadUser(id, listener)
         return null
     }
 
-    fun addUser(user: User){
-        if(!userCache.containsKey(user.id))
+    private fun addUser(user: User) {
+        if (!userCache.containsKey(user.id))
             userCache[user.id] = user
     }
 
     @SuppressLint("CheckResult")
     private fun loadUser(id: Int, listener: UserInteractor) {
-        poolExecutor.submit{
-            VkApiService.api.getUserInfo(id.toString(), MainActivity.token).subscribe({
-                val body = it.body()!!.asJsonObject["response"].asJsonArray
-                for(item in body) {
-                    val itemObject = item.asJsonObject
-                    val user = User(itemObject["first_name"].asString, itemObject ["last_name"].asString, id, itemObject["photo_100"].asString)
-                    userCache[id] = user
-                    Observable.just(user).subscribeOn(AndroidSchedulers.mainThread()).subscribe {
-                        listener.onSuccessful(user)
-                    }
+        poolExecutor.submit {
+            if (id < 0) {
+                VkApiService.api.getGroupInfo((-id).toString(), MainActivity.token).subscribe({
+                    val obj = it.asJsonObject
+                    if (obj.has("error")) {
 
-                }
-            }, {
-                listener.onError(it)
-            })
+                    } else {
+                        val info = obj["response"].asJsonArray[0].asJsonObject
+                        val user = User(info["name"].asString, "", id, info["photo_100"].asString)
+                        userCache[id] = user
+                        Single.just(user).subscribeOn(AndroidSchedulers.mainThread()).subscribe({
+                            listener.onSuccessful(user)
+                        }, {
+                            listener.onError(it)
+                        })
+                    }
+                }, {
+                    listener.onError(it)
+                })
+            } else {
+                VkApiService.api.getUserInfo(id.toString(), MainActivity.token).subscribe({
+                    val body = it.body()!!.asJsonObject["response"].asJsonArray
+                    for (item in body) {
+                        val itemObject = item.asJsonObject
+                        val user = User(
+                            itemObject["first_name"].asString,
+                            itemObject["last_name"].asString,
+                            id,
+                            itemObject["photo_100"].asString
+                        )
+                        userCache[id] = user
+                        Single.just(user).subscribeOn(AndroidSchedulers.mainThread()).subscribe({
+                            listener.onSuccessful(user)
+                        }, {
+                            listener.onError(it)
+                        })
+
+                    }
+                }, {
+                    listener.onError(it)
+                })
+            }
         }
     }
 
@@ -160,26 +195,27 @@ class WallModel : MainActivity.DestroyListener{
 
     fun getWallMoreHandler(): Observable<JsonElement> = publicWallMore
 
-    fun loadWall(idWall:String, countWall:String){
-        val id= idWall.toIntOrNull()
+    fun loadWall(idWall: String, countWall: String) {
+        val id = idWall.toIntOrNull()
         val count: Int? = if (countWall.isEmpty()) null else countWall.toInt()
         publishRequest.onNext(RequestData(id, idWall, count))
     }
 
 
-    fun loadWallMore(idWall: String, countWall: String, offset: Int){
-        val id= idWall.toIntOrNull()
-        val count: Int? = if(countWall.isEmpty()) null else countWall.toInt()
-        val obs = if(id != null) {
+    fun loadWallMore(idWall: String, countWall: String, offset: Int) {
+        val id = idWall.toIntOrNull()
+        val count: Int? = if (countWall.isEmpty()) null else countWall.toInt()
+        val obs = if (id != null) {
             VkApiService.api.getWall(id, count = count, offset = offset, accessToken = MainActivity.token)
         } else {
             VkApiService.api.getWall(domain = idWall, count = count, offset = offset, accessToken = MainActivity.token)
         }
-        disposable.add(obs.subscribeOn(Schedulers.io()).subscribe({
-            publicWallMore.onNext(it.body()!!)
-        }, {
-            publicWallMore.onError(it)
-        })
+        disposable.add(
+            obs.subscribeOn(Schedulers.io()).subscribe({
+                publicWallMore.onNext(it.body()!!)
+            }, {
+                publicWallMore.onError(it)
+            })
         )
     }
 
