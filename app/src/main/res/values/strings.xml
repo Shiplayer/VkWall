@@ -1,3 +1,12 @@
 <resources>
-    <string name="app_name">VKWall</string>
+    <string name="app_name" translatable="false">VKWall</string>
+    <string name="total_count">Total:</string>
+    <string name="id_title">Id or short name</string>
+    <string name="count_title">Count</string>
+    <string name="show">Show</string>
+    <string name="show_empty_wall">Show empty wall</string>
+    <string name="clear">Clear</string>
+    <string name="date_format" translatable="false">dd.mm.yy hh:mm</string>
+    <string name="logo_user">logo user</string>
+    <string name="title_format" translatable="false">Name and LastName</string>
 </resources>

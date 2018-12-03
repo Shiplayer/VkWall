@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="total_count">Количество:</string>
+    <string name="id_title">Айди или короткое имя</string>
+    <string name="count_title">Количество</string>
+    <string name="show">Показать</string>
+    <string name="show_empty_wall">Показать пустые посты</string>
+    <string name="clear">Очистить</string>
+    <string name="logo_user">Логотип пользователя</string>
+</resources>
