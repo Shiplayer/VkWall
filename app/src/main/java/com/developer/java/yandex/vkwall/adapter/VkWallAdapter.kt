@@ -18,27 +18,57 @@ import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.schedulers.Schedulers
 import java.net.URL
-import java.text.SimpleDateFormat
-import java.util.*
-import java.util.concurrent.Executors
 
-class VkWallAdapter(var model: WallModel): RecyclerView.Adapter<VkWallAdapter.ViewHolder>() {
+/**
+ * Адаптер для [RecyclerView], в котором содержатся посты
+ * @param model - необходим для получения пользователей
+ */
+class VkWallAdapter(var model: WallModel) : RecyclerView.Adapter<VkWallAdapter.ViewHolder>() {
 
+    /**
+     * Список всех постов
+     */
     private var mData = mutableListOf<VkWallEntity>()
 
-    fun setData(list : List<VkWallEntity>){
-        mData.clear()
-        mData.addAll(list)
+    private var mOriginData = mutableListOf<VkWallEntity>()
+
+    fun setData(list: List<VkWallEntity>, filter: Boolean) {
+        mData = if (filter) list.filter { !it.content.isEmpty() }.toMutableList() else list.toMutableList()
+        mOriginData = list.toMutableList()
         notifyDataSetChanged()
     }
 
-    fun addData(list : List<VkWallEntity>){
+    /**
+     * Метод для добавления новых постов, которые будут добавлены в конце списка
+     * @param list - список новых постов
+     */
+    fun addData(list: List<VkWallEntity>, filter: Boolean) {
         val position = mData.size
-        mData.addAll(position, list)
+        if (filter) {
+            mData.addAll(position, list.filter {
+                !it.content.isEmpty()
+            })
+        } else {
+            mData.addAll(position, list)
+        }
+        mOriginData.addAll(mOriginData.size, list)
         notifyItemChanged(position)
     }
 
-    fun getItems() : List<VkWallEntity> = mData
+    fun setFilter(filter: Boolean) {
+        mData = if (filter) {
+            mData.filter {
+                !it.content.isEmpty()
+            }.toMutableList()
+        } else
+            mOriginData
+        notifyDataSetChanged()
+    }
+
+    /**
+     * Получение списка постов, которые сейчас есть в [VkWallAdapter]
+     */
+    fun getItems(): List<VkWallEntity> = mData
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VkWallAdapter.ViewHolder {
         return ViewHolder(LayoutInflater.from(parent.context).inflate(R.layout.rv_item_text, parent, false), model)
@@ -48,18 +78,28 @@ class VkWallAdapter(var model: WallModel): RecyclerView.Adapter<VkWallAdapter.Vi
         return mData.size
     }
 
+    fun getOriginItemCount(): Int {
+        return mOriginData.size
+    }
+
     override fun onBindViewHolder(holder: VkWallAdapter.ViewHolder, position: Int) {
         holder.init(mData[position])
     }
 
-    class ViewHolder(view: View, val model:WallModel) : RecyclerView.ViewHolder(view) {
-        val name = view.findViewById<TextView>(R.id.item_title)
-        val date = view.findViewById<TextView>(R.id.item_date)
-        val content = view.findViewById<TextView>(R.id.item_content)
-        val logo = view.findViewById<ImageView>(R.id.item_logo)
+    /**
+     * [ViewHolder], в котором содержится вся информация об данном посте
+     */
+    class ViewHolder(view: View, private val model: WallModel) : RecyclerView.ViewHolder(view) {
+        val name = view.findViewById<TextView>(R.id.item_title)!!
+        val date = view.findViewById<TextView>(R.id.item_date)!!
+        val content = view.findViewById<TextView>(R.id.item_content)!!
+        val logo = view.findViewById<ImageView>(R.id.item_logo)!!
 
-        fun init(item : VkWallEntity){
-            val user = model.getUser(item.id, object : UserInteractor{
+        /**
+         * Инициализация поста и получение пользователя, который написал этот пост
+         */
+        fun init(item: VkWallEntity) {
+            val user = model.getUser(item.id, object : UserInteractor {
                 override fun onSuccessful(user: User) {
                     showUser(user)
                 }
@@ -69,13 +109,16 @@ class VkWallAdapter(var model: WallModel): RecyclerView.Adapter<VkWallAdapter.Vi
                     throwable.printStackTrace()
                 }
             })
-            if(user != null){
+            if (user != null) {
                 showUser(user)
             }
             content.text = item.content
             date.text = item.date
         }
 
+        /**
+         * Отобразить пользователя данного поста
+         */
         @SuppressLint("SetTextI18n")
         fun showUser(user: User) {
             name.text = user.firstName + " " + user.lastName
